@@ -157,6 +157,13 @@ def complete_stream(question, docsearch, chat_history, api_key):
     docs_together = "\n".join([doc.page_content for doc in docs])
     p_chat_combine = chat_combine_template.replace("{summaries}", docs_together)
     messages_combine = [{"role": "system", "content": p_chat_combine}]
+    for doc in docs:
+        if doc.metadata:
+            data = json.dumps({"type": "source", "doc": doc.page_content, "metadata": doc.metadata})
+        else:
+            data = json.dumps({"type": "source", "doc": doc.page_content})
+        yield f"data:{data}\n\n"
+
     if len(chat_history) > 1:
         tokens_current_history = 0
         # count tokens in history
@@ -307,6 +314,15 @@ def api_answer():
             result['answer'] = result['answer'].split("SOURCES:")[0]
         except Exception:
             pass
+
+        sources = docsearch.similarity_search(question, k=2)
+        sources_doc = []
+        for doc in sources:
+            if doc.metadata:
+                sources_doc.append({'title': doc.metadata['title'], 'text': doc.page_content})
+            else:
+                sources_doc.append({'title': doc.page_content, 'text': doc.page_content})
+        result['sources'] = sources_doc
 
         # mock result
         # result = {

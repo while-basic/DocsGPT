@@ -28,6 +28,24 @@ export const fetchAnswer = createAsyncThunk<Answer, { question: string }>(
             if (data.type === 'end') {
               // set status to 'idle'
               dispatch(conversationSlice.actions.setStatus('idle'));
+            } else if (data.type === 'source') {
+              // check if data.metadata exists
+              let result;
+              if (data.metadata && data.metadata.title) {
+                const titleParts = data.metadata.title.split('/');
+                result = {
+                  title: titleParts[titleParts.length - 1],
+                  text: data.doc,
+                };
+              } else {
+                result = { title: data.doc, text: data.doc };
+              }
+              dispatch(
+                updateStreamingSource({
+                  index: state.conversation.queries.length - 1,
+                  query: { sources: [result] },
+                }),
+              );
             } else {
               const result = data.answer;
               dispatch(
@@ -47,17 +65,29 @@ export const fetchAnswer = createAsyncThunk<Answer, { question: string }>(
           state.conversation.queries,
         );
         if (answer) {
+          let sourcesPrepped = [];
+          sourcesPrepped = answer.sources.map((source) => {
+            if (source && source.title) {
+              const titleParts = source.title.split('/');
+              return {
+                ...source,
+                title: titleParts[titleParts.length - 1],
+              };
+            }
+            return source;
+          });
+
           dispatch(
             updateQuery({
               index: state.conversation.queries.length - 1,
-              query: { response: answer.answer },
+              query: { response: answer.answer, sources: sourcesPrepped },
             }),
           );
           dispatch(conversationSlice.actions.setStatus('idle'));
         }
       }
     }
-    return { answer: '', query: question, result: '' };
+    return { answer: '', query: question, result: '', sources: [] };
   },
 );
 
@@ -81,6 +111,17 @@ export const conversationSlice = createSlice({
           ...state.queries[index],
           ...action.payload.query,
         };
+      }
+    },
+    updateStreamingSource(
+      state,
+      action: PayloadAction<{ index: number; query: Partial<Query> }>,
+    ) {
+      const index = action.payload.index;
+      if (!state.queries[index].sources) {
+        state.queries[index].sources = [action.payload.query.sources![0]];
+      } else {
+        state.queries[index].sources!.push(action.payload.query.sources![0]);
       }
     },
     updateQuery(
@@ -116,6 +157,10 @@ export const selectQueries = (state: RootState) => state.conversation.queries;
 
 export const selectStatus = (state: RootState) => state.conversation.status;
 
-export const { addQuery, updateQuery, updateStreamingQuery } =
-  conversationSlice.actions;
+export const {
+  addQuery,
+  updateQuery,
+  updateStreamingQuery,
+  updateStreamingSource,
+} = conversationSlice.actions;
 export default conversationSlice.reducer;
